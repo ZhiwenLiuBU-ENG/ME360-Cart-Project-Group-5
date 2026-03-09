@@ -2,7 +2,7 @@
   Encoder-based distance control for DC motor
   Drives a set distance forward and back, with acceleration and braking ramps.
   
-  Pins: IN1=5 (foward PWM), IN2=6 (reverse PWM), ENC_A=2 (interrupt), ENC_B=3 (direction)
+  Pins: IN1=5 (forward PWM), IN2=6 (reverse PWM), ENC_A=2 (interrupt), ENC_B=3 (direction)
 */
 
 #include <Arduino.h>
