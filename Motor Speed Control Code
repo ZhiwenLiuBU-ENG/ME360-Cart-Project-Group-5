@@ -1,5 +1,13 @@
+/*
+  Encoder-based distance control for DC motor
+  Drives a set distance forward and back, with acceleration and braking ramps.
+  
+  Pins: IN1=5 (fwd PWM), IN2=6 (rev PWM), ENC_A=2 (interrupt), ENC_B=3 (direction)
+*/
+
 #include <Arduino.h>
 
+// --- Motion parameters ---
 float distance_ft = 6;
 float wheel_diam_in = 3.0;
 const long COUNTS_PER_WHEEL_REV = 250;
@@ -8,11 +16,12 @@ int PWM_MAX = 200;
 int PWM_MIN = 60;
 int PWM_STEP = 5;
 int RAMP_DT_MS = 30;
-long DECEL_BUFFER_COUNTS = 750;
+long DECEL_BUFFER_COUNTS = 750; // how early to start braking (tune this)
 
 const unsigned long STARTUP_DELAY_MS = 2000;
 const unsigned long DWELL_MS = 2000;
 
+// --- Pins ---
 const int IN1_PIN = 5;
 const int IN2_PIN = 6;
 const int ENC_A   = 2;
@@ -68,6 +77,7 @@ void moveOneWay(int dir, long targetCounts) {
   int pwm = 0;
   long traveled = 0;
 
+  // Ramp up until we're close enough to start braking
   while (true) {
     traveled = labs(readCount());
     long remaining = targetCounts - traveled;
@@ -81,6 +91,7 @@ void moveOneWay(int dir, long targetCounts) {
     delay(RAMP_DT_MS);
   }
 
+  // Linear decel to target
   while (true) {
     traveled = labs(readCount());
     long remaining = targetCounts - traveled;
