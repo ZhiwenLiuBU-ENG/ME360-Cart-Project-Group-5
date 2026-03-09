@@ -91,7 +91,7 @@ void moveOneWay(int dir, long targetCounts) {
     delay(RAMP_DT_MS);
   }
 
-  // Linear decel to target
+  // Linear deceleration to target
   while (true) {
     traveled = labs(readCount());
     long remaining = targetCounts - traveled;
