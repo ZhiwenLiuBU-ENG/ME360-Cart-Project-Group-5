@@ -1,0 +1,127 @@
+#include <Arduino.h>
+
+float distance_ft = 6;
+float wheel_diam_in = 3.0;
+const long COUNTS_PER_WHEEL_REV = 250;
+
+int PWM_MAX = 200;
+int PWM_MIN = 60;
+int PWM_STEP = 5;
+int RAMP_DT_MS = 30;
+long DECEL_BUFFER_COUNTS = 750;
+
+const unsigned long STARTUP_DELAY_MS = 2000;
+const unsigned long DWELL_MS = 2000;
+
+const int IN1_PIN = 5;
+const int IN2_PIN = 6;
+const int ENC_A   = 2;
+const int ENC_B   = 3;
+
+volatile long count = 0;
+
+void encoderISR() {
+  bool b = digitalRead(ENC_B);
+  if (b) count--;
+  else   count++;
+}
+
+long readCount() {
+  noInterrupts();
+  long c = count;
+  interrupts();
+  return c;
+}
+
+void resetCount() {
+  noInterrupts();
+  count = 0;
+  interrupts();
+}
+
+void setMotorPWM(int pwmSigned) {
+  int u = abs(pwmSigned);
+  if (u > 255) u = 255;
+
+  if (pwmSigned > 0) {
+    analogWrite(IN1_PIN, u);
+    digitalWrite(IN2_PIN, LOW);
+  } else if (pwmSigned < 0) {
+    digitalWrite(IN1_PIN, LOW);
+    analogWrite(IN2_PIN, u);
+  } else {
+    digitalWrite(IN1_PIN, LOW);
+    digitalWrite(IN2_PIN, LOW);
+  }
+}
+
+long computeTargetCounts() {
+  float wheel_diam_m = wheel_diam_in * 0.0254f;
+  float C = PI * wheel_diam_m;
+  float D = distance_ft * 0.3048f;
+  float revs = D / C;
+  return (long)lround(revs * (float)COUNTS_PER_WHEEL_REV);
+}
+
+void moveOneWay(int dir, long targetCounts) {
+  resetCount();
+  int pwm = 0;
+  long traveled = 0;
+
+  while (true) {
+    traveled = labs(readCount());
+    long remaining = targetCounts - traveled;
+    if (remaining <= 0 || remaining <= DECEL_BUFFER_COUNTS) break;
+
+    pwm += PWM_STEP;
+    if (pwm > PWM_MAX) pwm = PWM_MAX;
+    if (pwm < PWM_MIN) pwm = PWM_MIN;
+
+    setMotorPWM(dir * pwm);
+    delay(RAMP_DT_MS);
+  }
+
+  while (true) {
+    traveled = labs(readCount());
+    long remaining = targetCounts - traveled;
+    if (remaining <= 0) break;
+
+    float frac = (DECEL_BUFFER_COUNTS > 0) ? ((float)remaining / (float)DECEL_BUFFER_COUNTS) : 0.0f;
+    if (frac > 1.0f) frac = 1.0f;
+    if (frac < 0.0f) frac = 0.0f;
+
+    int pwmCmd = (int)lround(PWM_MIN + (PWM_MAX - PWM_MIN) * frac);
+    if (pwmCmd > PWM_MAX) pwmCmd = PWM_MAX;
+    if (pwmCmd < PWM_MIN) pwmCmd = PWM_MIN;
+
+    setMotorPWM(dir * pwmCmd);
+    delay(RAMP_DT_MS);
+  }
+
+  setMotorPWM(0);
+}
+
+void setup() {
+  pinMode(IN1_PIN, OUTPUT);
+  pinMode(IN2_PIN, OUTPUT);
+  pinMode(ENC_A, INPUT_PULLUP);
+  pinMode(ENC_B, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(ENC_A), encoderISR, RISING);
+
+  Serial.begin(115200);
+  delay(100);
+  delay(STARTUP_DELAY_MS);
+  Serial.println("Distance move start");
+}
+
+void loop() {
+  long targetCounts = computeTargetCounts();
+  Serial.print("Target counts = ");
+  Serial.println(targetCounts);
+
+  moveOneWay(+1, targetCounts);
+  delay(DWELL_MS);
+
+  moveOneWay(-1, targetCounts);
+  delay(DWELL_MS);
+}
